@@ -138,7 +138,7 @@ app.post('/api/contact', async (req, res) => {
     if (error.code === 'MAIL_NOT_CONFIGURED') {
       return res.status(503).json({
         error:
-          'Email delivery is not set up yet. Add SMTP settings in server/.env (see server/.env.example).',
+          'Email delivery is not set up on Render. Please configure SMTP environment variables in your Render Dashboard.',
       });
     }
 
@@ -149,8 +149,7 @@ app.post('/api/contact', async (req, res) => {
     }
 
     return res.status(502).json({
-      error:
-        'Could not send your message right now. Please try again later or email me directly.',
+      error: `Could not send message: ${error.message || 'Please try again later or contact directly.'}`,
     });
   }
 });
