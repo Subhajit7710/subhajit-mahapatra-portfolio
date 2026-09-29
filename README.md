@@ -43,15 +43,30 @@ CORS_ORIGIN=http://localhost:5173,https://your-frontend.example.com
 
 ## Contact form email
 
-Messages are emailed with Nodemailer (Gmail SMTP).
+Contact messages are emailed to `CONTACT_TO_EMAIL`. The server picks a mail provider automatically (first match wins):
 
-1. Open `server/.env`
-2. Set `SMTP_PASS` to a Gmail **App Password** (not your normal password)
-3. Restart the API: `npm run start:server`
+| Priority | Env var(s) | Provider | Use for |
+|---|---|---|---|
+| 1 | `RESEND_API_KEY` | [Resend](https://resend.com) HTTPS API | **Production on Render (recommended)** |
+| 2 | `BREVO_API_KEY` + `BREVO_SENDER_EMAIL` | [Brevo](https://brevo.com) HTTPS API | Production alternative |
+| 3 | `SMTP_USER` + `SMTP_PASS` | Gmail SMTP via Nodemailer | Local development |
 
-Create an app password: Google Account → Security → 2-Step Verification → App passwords.
+> **Why not Gmail SMTP on Render?** Render's free plan blocks all outbound SMTP ports (25, 465, 587), so SMTP connections time out there. The HTTPS email APIs above are not blocked.
 
-Without `SMTP_PASS`, the contact form returns an error instead of pretending to send mail.
+### Resend setup (production)
+
+1. Sign up at [resend.com](https://resend.com) with the **same email** as `CONTACT_TO_EMAIL`. Without a verified domain, Resend only delivers to your own account email, which is all a contact form needs.
+2. Go to **API Keys → Create API Key** (Sending access) and copy the `re_...` key.
+3. Add `RESEND_API_KEY` in Render → Environment. Never commit the key.
+
+Emails arrive from `onboarding@resend.dev` with **Reply-To** set to the visitor, so hitting Reply answers them directly. After verifying your own domain in Resend you can set `MAIL_FROM=Portfolio <contact@yourdomain.com>`.
+
+### Gmail SMTP (local development)
+
+1. In `server/.env`, set `SMTP_USER` and `SMTP_PASS`. `SMTP_PASS` must be a Gmail **App Password**, not your normal password (Google Account → Security → 2-Step Verification → App passwords).
+2. Restart the API: `npm run start:server`
+
+If no provider is configured, the contact form returns an error instead of pretending to send mail.
 
 ## Deploy on Render (one Web Service)
 
@@ -60,7 +75,7 @@ Use a **Web Service**, not a Static Site. The Express server both serves the Rea
 | Setting | Value |
 |---|---|
 | Runtime | Node |
-| Build command | `npm install && npm --prefix server install && npx vite build` |
+| Build command | `npm run install:all && npm run build` |
 | Start command | `npm start` |
 | Health check | `/api/health` |
 
@@ -69,19 +84,15 @@ Environment variables (Render Dashboard → Environment):
 ```
 CORS_ORIGIN=*
 CONTACT_TO_EMAIL=you@gmail.com
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=you@gmail.com
-SMTP_PASS=your_16_char_gmail_app_password
+RESEND_API_KEY=re_your_resend_api_key
 ```
 
 Important:
 
 - Do **not** set `VITE_API_URL` when frontend and API are the same Render service. Leave it empty so the form posts to `/api/contact`.
-- After changing env vars, **restart** the service. SMTP vars do not need a rebuild; `VITE_*` vars do.
-- On Render, Gmail port 587 often hangs. Use **465** + `SMTP_SECURE=true`.
-- Check `https://your-app.onrender.com/api/health` — `mailConfigured` should be `true`.
+- After changing env vars, **restart** the service. Mail vars do not need a rebuild; `VITE_*` vars do.
+- Any `SMTP_*` vars left in Render are ignored once `RESEND_API_KEY` is set.
+- Check `https://your-app.onrender.com/api/health`. It should show `"mailConfigured": true` and `"mailProvider": "resend"`.
 
 ## Featured projects
 
