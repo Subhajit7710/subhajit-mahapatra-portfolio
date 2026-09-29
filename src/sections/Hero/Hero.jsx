@@ -21,9 +21,7 @@ function Hero({ profile }) {
   const title = profile?.title || 'Aspiring Software Engineer';
   const summary =
     profile?.summary ||
-    'MCA student and aspiring software engineer skilled in React, Node.js, and full-stack development.';
-  const shortSummary =
-    summary.length > 170 ? `${summary.slice(0, 170).trim()}…` : summary;
+    'MCA student and aspiring software engineer skilled in Java, JavaScript, React.js, Node.js, and Express.js. Learning to build REST APIs, authentication flows, and full-stack applications. Also exploring AI with PyTorch, Hugging Face, and related tools, with a focus on practical projects and end-to-end development.';
 
   return (
     <section id="hero" className={styles.container}>
@@ -34,7 +32,7 @@ function Hero({ profile }) {
           <span className={styles.lastName}>{lastName}</span>
         </h1>
         <h2>{title}</h2>
-        <p className={styles.description}>{shortSummary}</p>
+        <p className={styles.description}>{summary}</p>
 
         <div className={styles.actions}>
           <a href={CV} download="Subhajit_Mahapatra_Resume.pdf">
