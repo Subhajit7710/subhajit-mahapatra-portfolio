@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 import { seedIfEmpty } from './seed.js';
@@ -141,9 +142,20 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
+// Serve frontend build if dist folder exists
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 app.listen(PORT, () => {
   console.log(`Portfolio API running on http://localhost:${PORT}`);
   console.log(
     `Mail configured: ${isMailConfigured() ? 'yes' : 'no (set SMTP_* in server/.env)'}`
   );
 });
+
