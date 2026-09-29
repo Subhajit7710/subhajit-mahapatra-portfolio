@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: subhajit-mahapatra-portfolio
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm --prefix server install && npx vite build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CORS_ORIGIN
+        value: "*"

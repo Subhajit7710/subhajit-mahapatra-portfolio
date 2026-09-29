@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
+    "render-build": "npm install && npm --prefix server install && vite build",
     "dev": "vite",
     "dev:server": "npm --prefix server run dev",
     "dev:all": "npm run dev:server & npm run dev",

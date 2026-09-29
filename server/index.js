@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -7,6 +8,8 @@ import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 import { seedIfEmpty } from './seed.js';
 import { sendContactEmail, isMailConfigured } from './mail.js';
+
+dns.setDefaultResultOrder('ipv4first');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -26,19 +29,27 @@ const envOrigins = (process.env.CORS_ORIGIN || '')
 
 const corsOrigins = [...defaultOrigins, ...envOrigins];
 
+function isAllowedOrigin(origin) {
+  if (
+    !origin ||
+    corsOrigins.includes('*') ||
+    corsOrigins.includes(origin) ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  ) {
+    return true;
+  }
+
+  try {
+    return /\.onrender\.com$/.test(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 app.use(
   cors({
     origin(origin, callback) {
-      if (
-        !origin ||
-        corsOrigins.includes('*') ||
-        corsOrigins.includes(origin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
-      ) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
+      callback(null, isAllowedOrigin(origin));
     },
   })
 );
@@ -142,7 +153,7 @@ app.post('/api/contact', async (req, res) => {
       });
     }
 
-    if (error.code === 'GMAIL_APP_PASS_REQUIRED') {
+    if (error.code === 'GMAIL_APP_PASS_REQUIRED' || error.code === 'SMTP_TIMEOUT') {
       return res.status(500).json({
         error: error.message,
       });
@@ -164,10 +175,10 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`Portfolio API running on http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Portfolio API running on http://0.0.0.0:${PORT}`);
   console.log(
-    `Mail configured: ${isMailConfigured() ? 'yes' : 'no (set SMTP_* in server/.env)'}`
+    `Mail configured: ${isMailConfigured() ? 'yes' : 'no (set SMTP_* in Render env)'}`
   );
 });
 

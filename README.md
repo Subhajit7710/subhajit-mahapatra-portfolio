@@ -53,11 +53,35 @@ Create an app password: Google Account → Security → 2-Step Verification → 
 
 Without `SMTP_PASS`, the contact form returns an error instead of pretending to send mail.
 
+## Deploy on Render (one Web Service)
 
-1. Build frontend: `npm run build` → deploy `dist/`
-2. Host the Express API separately (Render, Railway, etc.)
-3. Set `VITE_API_URL` to your live API `/api` URL before building
-4. Set `CORS_ORIGIN` on the server to your live frontend origin(s)
+Use a **Web Service**, not a Static Site. The Express server both serves the React build and handles `/api/contact`.
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Build command | `npm install && npm --prefix server install && npx vite build` |
+| Start command | `npm start` |
+| Health check | `/api/health` |
+
+Environment variables (Render Dashboard → Environment):
+
+```
+CORS_ORIGIN=*
+CONTACT_TO_EMAIL=you@gmail.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=you@gmail.com
+SMTP_PASS=your_16_char_gmail_app_password
+```
+
+Important:
+
+- Do **not** set `VITE_API_URL` when frontend and API are the same Render service. Leave it empty so the form posts to `/api/contact`.
+- After changing env vars, **restart** the service. SMTP vars do not need a rebuild; `VITE_*` vars do.
+- On Render, Gmail port 587 often hangs. Use **465** + `SMTP_SECURE=true`.
+- Check `https://your-app.onrender.com/api/health` — `mailConfigured` should be `true`.
 
 ## Featured projects
 
