@@ -5,19 +5,37 @@ function isMailConfigured() {
 }
 
 function createTransporter() {
+  const rawUser = (process.env.SMTP_USER || '').trim();
   const rawPass = (process.env.SMTP_PASS || '').trim();
-  const pass = rawPass.includes(' ') ? rawPass.replace(/\s+/g, '') : rawPass;
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const pass = rawPass.replace(/\s+/g, '');
+  const host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+
+  if (host.includes('gmail') || rawUser.endsWith('@gmail.com')) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: rawUser,
+        pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+  }
+
   const port = Number(process.env.SMTP_PORT) || 587;
-  const secure = process.env.SMTP_SECURE === 'true';
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   return nodemailer.createTransport({
     host,
     port,
     secure,
     auth: {
-      user: process.env.SMTP_USER,
+      user: rawUser,
       pass,
+    },
+    tls: {
+      rejectUnauthorized: false,
     },
   });
 }
