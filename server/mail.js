@@ -1,145 +1,217 @@
 import nodemailer from 'nodemailer';
 
+/*
+ * Contact-form mail delivery.
+ *
+ * Render's FREE plan blocks all outbound SMTP ports (25, 465, 587), so Gmail
+ * SMTP can never connect from there. In production we send through an HTTPS
+ * email API instead. Provider is picked in this order:
+ *
+ *   1. RESEND_API_KEY  -> Resend  (https://resend.com)
+ *   2. BREVO_API_KEY   -> Brevo   (https://brevo.com)
+ *   3. SMTP_USER/PASS  -> nodemailer SMTP (works locally / on paid Render plans)
+ */
+
 const SMTP_TIMEOUT_MS = 12000;
+const HTTP_TIMEOUT_MS = 15000;
 
 function cleanEnv(value) {
   return (value || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
-function isMailConfigured() {
-  return Boolean(cleanEnv(process.env.SMTP_USER) && cleanEnv(process.env.SMTP_PASS));
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function authConfig() {
+function mailProvider() {
+  if (cleanEnv(process.env.RESEND_API_KEY)) return 'resend';
+  if (cleanEnv(process.env.BREVO_API_KEY)) return 'brevo';
+  if (cleanEnv(process.env.SMTP_USER) && cleanEnv(process.env.SMTP_PASS)) return 'smtp';
+  return null;
+}
+
+function isMailConfigured() {
+  return Boolean(mailProvider());
+}
+
+function recipient() {
+  return (
+    cleanEnv(process.env.CONTACT_TO_EMAIL) ||
+    cleanEnv(process.env.SMTP_USER) ||
+    cleanEnv(process.env.BREVO_SENDER_EMAIL)
+  );
+}
+
+function buildMessage({ name, email, message }) {
+  return {
+    subject: `Portfolio message from ${name}`,
+    text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+    html: `
+      <h2>New portfolio contact message</h2>
+      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+      <p><strong>Message:</strong></p>
+      <p>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>
+    `,
+  };
+}
+
+async function postJson(url, headers, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = data.message || data.error || data.code || response.statusText;
+      const err = new Error(`Email API error (${response.status}): ${detail}`);
+      err.code = 'MAIL_API_ERROR';
+      throw err;
+    }
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const err = new Error('The email service did not respond in time. Please try again.');
+      err.code = 'MAIL_TIMEOUT';
+      throw err;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ---------- Resend ---------- */
+async function sendWithResend(contact) {
+  const content = buildMessage(contact);
+  // Without a verified domain, Resend only allows sending FROM onboarding@resend.dev
+  // TO the email address you signed up to Resend with.
+  const from = cleanEnv(process.env.MAIL_FROM) || 'Portfolio Contact <onboarding@resend.dev>';
+
+  await postJson(
+    'https://api.resend.com/emails',
+    { Authorization: `Bearer ${cleanEnv(process.env.RESEND_API_KEY)}` },
+    {
+      from,
+      to: [recipient()],
+      reply_to: contact.email,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    }
+  );
+}
+
+/* ---------- Brevo ---------- */
+async function sendWithBrevo(contact) {
+  const content = buildMessage(contact);
+  // Must be a sender address you verified in Brevo (Senders & IPs -> Senders).
+  const senderEmail =
+    cleanEnv(process.env.BREVO_SENDER_EMAIL) ||
+    cleanEnv(process.env.SMTP_USER) ||
+    recipient();
+
+  await postJson(
+    'https://api.brevo.com/v3/smtp/email',
+    { 'api-key': cleanEnv(process.env.BREVO_API_KEY) },
+    {
+      sender: { name: 'Portfolio Contact', email: senderEmail },
+      to: [{ email: recipient() }],
+      replyTo: { email: contact.email, name: contact.name },
+      subject: content.subject,
+      textContent: content.text,
+      htmlContent: content.html,
+    }
+  );
+}
+
+/* ---------- SMTP (local dev / paid hosting) ---------- */
+function smtpAuth() {
   return {
     user: cleanEnv(process.env.SMTP_USER),
     pass: cleanEnv(process.env.SMTP_PASS).replace(/\s+/g, ''),
   };
 }
 
-function transportOptions({ host, port, secure }) {
-  return {
-    host,
+async function sendWithSmtp(contact) {
+  const content = buildMessage(contact);
+  const port = Number(cleanEnv(process.env.SMTP_PORT)) || 465;
+  const transporter = nodemailer.createTransport({
+    host: cleanEnv(process.env.SMTP_HOST) || 'smtp.gmail.com',
     port,
-    secure,
-    auth: authConfig(),
+    secure: cleanEnv(process.env.SMTP_SECURE) === 'true' || port === 465,
+    auth: smtpAuth(),
     family: 4,
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,
-    tls: {
-      minVersion: 'TLSv1.2',
-    },
-  };
-}
-
-function gmailAttempts() {
-  const host = cleanEnv(process.env.SMTP_HOST) || 'smtp.gmail.com';
-
-  const attempts = [
-    { host: 'smtp.gmail.com', port: 465, secure: true },
-    { host: 'smtp.gmail.com', port: 587, secure: false },
-    {
-      host,
-      port: Number(cleanEnv(process.env.SMTP_PORT)) || 465,
-      secure:
-        cleanEnv(process.env.SMTP_SECURE) === 'true' ||
-        Number(cleanEnv(process.env.SMTP_PORT)) === 465,
-    },
-  ];
-
-  const seen = new Set();
-  return attempts.filter((attempt) => {
-    const key = `${attempt.host}:${attempt.port}:${attempt.secure}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
   });
+
+  try {
+    await transporter.sendMail({
+      from: `"Portfolio Contact" <${smtpAuth().user}>`,
+      to: recipient(),
+      replyTo: contact.email,
+      ...content,
+    });
+  } catch (error) {
+    if (error?.code === 'EAUTH' || error?.responseCode === 535) {
+      const err = new Error(
+        'Gmail authentication failed. Use a 16-character App Password in SMTP_PASS.'
+      );
+      err.code = 'GMAIL_APP_PASS_REQUIRED';
+      throw err;
+    }
+    if (['ETIMEDOUT', 'ESOCKET', 'ECONNECTION'].includes(error?.code) || /timeout/i.test(error?.message || '')) {
+      const err = new Error(
+        'Could not reach the SMTP server. Render free instances block SMTP ports — set RESEND_API_KEY or BREVO_API_KEY instead.'
+      );
+      err.code = 'SMTP_TIMEOUT';
+      throw err;
+    }
+    throw error;
+  } finally {
+    transporter.close();
+  }
 }
 
-function isAuthError(error) {
-  return error?.code === 'EAUTH' || error?.responseCode === 535;
-}
+export async function sendContactEmail(contact) {
+  const provider = mailProvider();
 
-function isTimeoutError(error) {
-  return ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNECTION', 'ETLS', 'EENVELOPE'].includes(
-    error?.code
-  ) || /timeout|timed out/i.test(error?.message || '');
-}
-
-export async function sendContactEmail({ name, email, message }) {
-  if (!isMailConfigured()) {
+  if (!provider) {
     const err = new Error(
-      'Email is not configured on the server. Please set SMTP_USER and SMTP_PASS in environment variables.'
+      'Email is not configured on the server. Set RESEND_API_KEY (or BREVO_API_KEY) in the environment.'
     );
     err.code = 'MAIL_NOT_CONFIGURED';
     throw err;
   }
 
-  const to = cleanEnv(process.env.CONTACT_TO_EMAIL) || authConfig().user;
-  const mail = {
-    from: `"Portfolio Contact" <${authConfig().user}>`,
-    to,
-    replyTo: email,
-    subject: `Portfolio message from ${name}`,
-    text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
-    html: `
-      <h2>New portfolio contact message</h2>
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Message:</strong></p>
-      <p>${message.replace(/\n/g, '<br/>')}</p>
-    `,
-  };
-
-  const host = cleanEnv(process.env.SMTP_HOST) || 'smtp.gmail.com';
-  const isGmail = host.includes('gmail') || authConfig().user.endsWith('@gmail.com');
-  const attempts = isGmail
-    ? gmailAttempts()
-    : [
-        {
-          host,
-          port: Number(cleanEnv(process.env.SMTP_PORT)) || 587,
-          secure:
-            cleanEnv(process.env.SMTP_SECURE) === 'true' ||
-            Number(cleanEnv(process.env.SMTP_PORT)) === 465,
-        },
-      ];
-
-  let lastError;
-
-  for (const attempt of attempts) {
-    try {
-      const transporter = nodemailer.createTransport(transportOptions(attempt));
-      await transporter.sendMail(mail);
-      transporter.close();
-      return;
-    } catch (error) {
-      lastError = error;
-      console.error(
-        `SMTP failed on ${attempt.host}:${attempt.port} (secure=${attempt.secure}):`,
-        error.code || error.message
-      );
-
-      if (isAuthError(error)) {
-        const authErr = new Error(
-          'Gmail authentication failed. Use a 16-character App Password in SMTP_PASS (not your Gmail login password), then restart the Render service.'
-        );
-        authErr.code = 'GMAIL_APP_PASS_REQUIRED';
-        throw authErr;
-      }
-    }
+  if (!recipient()) {
+    const err = new Error('CONTACT_TO_EMAIL is not set.');
+    err.code = 'MAIL_NOT_CONFIGURED';
+    throw err;
   }
 
-  if (isTimeoutError(lastError)) {
-    const timeoutErr = new Error(
-      'The mail server did not respond in time. Render often blocks or delays SMTP; try SMTP_PORT=465 and SMTP_SECURE=true, then restart the service.'
-    );
-    timeoutErr.code = 'SMTP_TIMEOUT';
-    throw timeoutErr;
+  try {
+    if (provider === 'resend') return await sendWithResend(contact);
+    if (provider === 'brevo') return await sendWithBrevo(contact);
+    return await sendWithSmtp(contact);
+  } catch (error) {
+    console.error(`Mail send failed via ${provider}:`, error.code || '', error.message);
+    throw error;
   }
-
-  throw lastError;
 }
 
-export { isMailConfigured };
+export { isMailConfigured, mailProvider };

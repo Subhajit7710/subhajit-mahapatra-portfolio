@@ -7,7 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 import { seedIfEmpty } from './seed.js';
-import { sendContactEmail, isMailConfigured } from './mail.js';
+import { sendContactEmail, isMailConfigured, mailProvider } from './mail.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -62,6 +62,7 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     mailConfigured: isMailConfigured(),
+    mailProvider: mailProvider(),
   });
 });
 
@@ -149,11 +150,11 @@ app.post('/api/contact', async (req, res) => {
     if (error.code === 'MAIL_NOT_CONFIGURED') {
       return res.status(503).json({
         error:
-          'Email delivery is not set up on Render. Please configure SMTP environment variables in your Render Dashboard.',
+          'Email delivery is not set up on the server. Please try again later or contact me directly.',
       });
     }
 
-    if (error.code === 'GMAIL_APP_PASS_REQUIRED' || error.code === 'SMTP_TIMEOUT') {
+    if (['GMAIL_APP_PASS_REQUIRED', 'SMTP_TIMEOUT', 'MAIL_TIMEOUT', 'MAIL_API_ERROR'].includes(error.code)) {
       return res.status(500).json({
         error: error.message,
       });
@@ -178,7 +179,7 @@ if (fs.existsSync(distPath)) {
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Portfolio API running on http://0.0.0.0:${PORT}`);
   console.log(
-    `Mail configured: ${isMailConfigured() ? 'yes' : 'no (set SMTP_* in Render env)'}`
+    `Mail provider: ${mailProvider() || 'none (set RESEND_API_KEY or BREVO_API_KEY)'}`
   );
 });
 
