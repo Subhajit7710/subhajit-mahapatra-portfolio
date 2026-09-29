@@ -2,6 +2,8 @@
 
 Full-stack personal portfolio: **React (Vite)** + **Express/Node** + **SQLite**.
 
+**Live site:** [subhajit-mahapatra-portfolio.onrender.com](https://subhajit-mahapatra-portfolio.onrender.com)
+
 ## Quick start
 
 ```bash
@@ -13,9 +15,6 @@ npm run start:server
 # Terminal 2 — Frontend
 npm run dev
 ```
-
-- Frontend: http://localhost:5173  
-- API: http://localhost:5000  
 
 ## Environment variables
 
@@ -31,14 +30,14 @@ Keep secrets and deploy URLs out of source. Use the example files:
 ```env
 # Empty in local dev (uses Vite `/api` proxy)
 # Production: full API base including /api
-VITE_API_URL=https://your-api.example.com/api
+VITE_API_URL=https://subhajit-mahapatra-portfolio.onrender.com/api
 ```
 
 ### Backend (`server/.env`)
 
 ```env
 PORT=5000
-CORS_ORIGIN=http://localhost:5173,https://your-frontend.example.com
+CORS_ORIGIN=https://subhajit-mahapatra-portfolio.onrender.com
 ```
 
 ## Contact form email
@@ -92,7 +91,7 @@ Important:
 - Do **not** set `VITE_API_URL` when frontend and API are the same Render service. Leave it empty so the form posts to `/api/contact`.
 - After changing env vars, **restart** the service. Mail vars do not need a rebuild; `VITE_*` vars do.
 - Any `SMTP_*` vars left in Render are ignored once `RESEND_API_KEY` is set.
-- Check `https://your-app.onrender.com/api/health`. It should show `"mailConfigured": true` and `"mailProvider": "resend"`.
+- Check [https://subhajit-mahapatra-portfolio.onrender.com/api/health](https://subhajit-mahapatra-portfolio.onrender.com/api/health). It should show `"mailConfigured": true` and `"mailProvider": "resend"`.
 
 ## Featured projects
 
