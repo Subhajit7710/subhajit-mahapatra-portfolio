@@ -1,20 +1,20 @@
 import nodemailer from 'nodemailer';
 
 function isMailConfigured() {
-  return Boolean(
-    process.env.SMTP_HOST &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS &&
-      process.env.CONTACT_TO_EMAIL
-  );
+  return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
 function createTransporter() {
-  const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  const rawPass = (process.env.SMTP_PASS || '').trim();
+  const pass = rawPass.includes(' ') ? rawPass.replace(/\s+/g, '') : rawPass;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const secure = process.env.SMTP_SECURE === 'true';
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
+    host,
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass,
@@ -25,14 +25,14 @@ function createTransporter() {
 export async function sendContactEmail({ name, email, message }) {
   if (!isMailConfigured()) {
     const err = new Error(
-      'Email is not configured. Add SMTP settings in server/.env'
+      'Email is not configured on the server. Please set SMTP_USER and SMTP_PASS in environment variables.'
     );
     err.code = 'MAIL_NOT_CONFIGURED';
     throw err;
   }
 
   const transporter = createTransporter();
-  const to = process.env.CONTACT_TO_EMAIL;
+  const to = process.env.CONTACT_TO_EMAIL || process.env.SMTP_USER;
 
   try {
     await transporter.sendMail({
