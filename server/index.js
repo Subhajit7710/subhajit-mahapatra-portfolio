@@ -152,10 +152,20 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Portfolio API running on http://localhost:${PORT}`);
   console.log(
     `Mail configured: ${isMailConfigured() ? 'yes' : 'no (set SMTP_* in server/.env)'}`
   );
 });
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use. Please stop the other running server process or choose a different PORT in server/.env.\n`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+  }
+});
+
 
