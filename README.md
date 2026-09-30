@@ -95,6 +95,5 @@ Important:
 
 ## Featured projects
 
-- [FamilyCare Frontend](https://github.com/Subhajit7710/FamilyCareFrontend)
-- [FamilyCare Backend](https://github.com/Subhajit7710/FamilyCareBackend)
+- **FamilyWellcare**: [Live](https://family-care-frontend.vercel.app/) · [Frontend](https://github.com/Subhajit7710/FamilyCareFrontend) · [Backend](https://github.com/Subhajit7710/FamilyCareBackend)
 - [JustAdvisor AI](https://github.com/Subhajit7710/JustAdvisor_AI)

@@ -2,9 +2,21 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 
+const FAMILYCARE_LIVE_URL = 'https://family-care-frontend.vercel.app/';
+
+// Keeps project links current on databases that were seeded earlier.
+function syncProjectLinks(db) {
+  db.prepare(
+    "UPDATE projects SET live_url = ? WHERE image_key = 'familycare' AND (live_url IS NULL OR live_url != ?)"
+  ).run(FAMILYCARE_LIVE_URL, FAMILYCARE_LIVE_URL);
+}
+
 export async function seedIfEmpty(db) {
   const profile = db.prepare('SELECT id FROM profile WHERE id = 1').get();
-  if (profile) return;
+  if (profile) {
+    syncProjectLinks(db);
+    return;
+  }
 
   db.prepare(`
     INSERT INTO profile (id, name, title, summary, email, phone, linkedin, github, leetcode, location)
@@ -92,7 +104,7 @@ export async function seedIfEmpty(db) {
     'React, Express.js, Microservices, API Gateway, REST, JWT, MySQL, Sequelize, BullMQ, Socket.IO, Redis',
     'https://github.com/Subhajit7710/FamilyCareFrontend',
     'https://github.com/Subhajit7710/FamilyCareBackend',
-    null,
+    FAMILYCARE_LIVE_URL,
     'familycare',
     1
   );
